@@ -1,21 +1,128 @@
-from django.shortcuts import render
+from rest_framework import generics, permissions, status
+from rest_framework.response import Response
+from rest_framework.views import APIView
+from django.shortcuts import get_object_or_404
+import random
 
-# Create your views here.
-from rest_framework import generics, permissions
-from .models import User, Group
-from .serializers import RegisterSerializer, GroupSerializer
-from rest_framework_simplejwt.views import TokenObtainPairView
+from .models import User, Group, Pair, WishlistItem, GroupMessage
+from .serializers import (
+    RegisterSerializer, UserSerializer,
+    GroupSerializer, PairSerializer,
+    WishlistSerializer, GroupMessageSerializer
+)
 
-
+# -------------------
+# 1️⃣ User Registration
+# -------------------
 class RegisterView(generics.CreateAPIView):
     queryset = User.objects.all()
     serializer_class = RegisterSerializer
     permission_classes = [permissions.AllowAny]
 
+# -------------------
+# 2️⃣ Group Views
+# -------------------
 class GroupListCreateView(generics.ListCreateAPIView):
-    queryset = Group.objects.all()
     serializer_class = GroupSerializer
     permission_classes = [permissions.IsAuthenticated]
 
+    def get_queryset(self):
+        # User sees only groups they belong to
+        return self.request.user.groups.all()
+
     def perform_create(self, serializer):
-        serializer.save(admin=self.request.user)
+        group = serializer.save(admin=self.request.user)
+        # Add admin as a member automatically
+        group.members.add(self.request.user)
+
+# Join a group
+class JoinGroupView(APIView):
+    permission_classes = [permissions.IsAuthenticated]
+
+    def post(self, request, group_id):
+        group = get_object_or_404(Group, id=group_id)
+        group.members.add(request.user)
+        return Response({"detail": f"{request.user.username} joined {group.name}"})
+
+
+# -------------------
+# 3️⃣ Secret Santa Pairing
+# -------------------
+class GeneratePairsView(APIView):
+    permission_classes = [permissions.IsAuthenticated]
+
+    def post(self, request, group_id):
+        group = get_object_or_404(Group, id=group_id)
+
+        if request.user != group.admin:
+            return Response({"detail": "Only admin can generate pairs."}, status=403)
+
+        members = list(group.members.all())
+        if len(members) < 2:
+            return Response({"detail": "Not enough members."}, status=400)
+
+        # Clear old pairs
+        group.pairs.all().delete()
+
+        # Shuffle and create pairs
+        shuffled = members[:]
+        random.shuffle(shuffled)
+
+        for i in range(len(shuffled)):
+            giver = shuffled[i]
+            receiver = shuffled[(i + 1) % len(shuffled)]
+            Pair.objects.create(group=group, giver=giver, receiver=receiver)
+
+        return Response({"detail": "Pairs generated and emails sent!"})
+
+
+# View only your recipient (member)
+class MyPairView(APIView):
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request, group_id):
+        group = get_object_or_404(Group, id=group_id)
+        try:
+            pair = Pair.objects.get(group=group, giver=request.user)
+            return Response({"your_recipient": pair.receiver.username})
+        except Pair.DoesNotExist:
+            return Response({"detail": "Pairing not generated yet."}, status=404)
+
+
+# -------------------
+# 4️⃣ Wishlist CRUD
+# -------------------
+class WishlistCreateView(generics.CreateAPIView):
+    serializer_class = WishlistSerializer
+    permission_classes = [permissions.IsAuthenticated]
+
+    def perform_create(self, serializer):
+        group_id = self.kwargs.get("group_id")
+        group = get_object_or_404(Group, id=group_id)
+        serializer.save(user=self.request.user, group=group)
+
+
+class WishlistListView(generics.ListAPIView):
+    serializer_class = WishlistSerializer
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get_queryset(self):
+        group_id = self.kwargs.get("group_id")
+        return WishlistItem.objects.filter(group__id=group_id)
+
+
+# -------------------
+# 5️⃣ Group Messages
+# -------------------
+class GroupMessageListCreateView(generics.ListCreateAPIView):
+    serializer_class = GroupMessageSerializer
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get_queryset(self):
+        group_id = self.kwargs.get("group_id")
+        return GroupMessage.objects.filter(group__id=group_id)
+
+    def perform_create(self, serializer):
+        group_id = self.kwargs.get("group_id")
+        group = get_object_or_404(Group, id=group_id)
+        serializer.save(user=self.request.user, group=group)
