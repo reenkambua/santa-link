@@ -1,6 +1,7 @@
 from django.db import models
 from django.contrib.auth.models import AbstractUser
 from django.core.mail import send_mail
+import os
 
 
 class User(AbstractUser):
@@ -31,7 +32,7 @@ class Pair(models.Model):
         send_mail(
             subject=f"🎅 Your Secret Santa Recipient for {self.group.name}",
             message=f"Hi {self.giver.username}, your recipient is {self.receiver.username}!",
-            from_email="santa@santalink.com",
+            from_email=os.getenv("EMAIL_HOST_USER"),
             recipient_list=[self.giver.email],
             fail_silently=True
         )
