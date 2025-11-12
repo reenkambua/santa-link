@@ -11,31 +11,22 @@ from .serializers import (
     WishlistSerializer, GroupMessageSerializer
 )
 
-# -------------------
-# 1️⃣ User Registration
-# -------------------
 class RegisterView(generics.CreateAPIView):
     queryset = User.objects.all()
     serializer_class = RegisterSerializer
     permission_classes = [permissions.AllowAny]
 
-# -------------------
-# 2️⃣ Group Views
-# -------------------
 class GroupListCreateView(generics.ListCreateAPIView):
     serializer_class = GroupSerializer
     permission_classes = [permissions.IsAuthenticated]
 
     def get_queryset(self):
-        # User sees only groups they belong to
         return self.request.user.groups.all()
 
     def perform_create(self, serializer):
         group = serializer.save(admin=self.request.user)
-        # Add admin as a member automatically
         group.members.add(self.request.user)
 
-# Join a group
 class JoinGroupView(APIView):
     permission_classes = [permissions.IsAuthenticated]
 
@@ -44,10 +35,6 @@ class JoinGroupView(APIView):
         group.members.add(request.user)
         return Response({"detail": f"{request.user.username} joined {group.name}"})
 
-
-# -------------------
-# 3️⃣ Secret Santa Pairing
-# -------------------
 class GeneratePairsView(APIView):
     permission_classes = [permissions.IsAuthenticated]
 
@@ -61,10 +48,8 @@ class GeneratePairsView(APIView):
         if len(members) < 2:
             return Response({"detail": "Not enough members."}, status=400)
 
-        # Clear old pairs
         group.pairs.all().delete()
 
-        # Shuffle and create pairs
         shuffled = members[:]
         random.shuffle(shuffled)
 
@@ -76,7 +61,7 @@ class GeneratePairsView(APIView):
         return Response({"detail": "Pairs generated and emails sent!"})
 
 
-# View only your recipient (member)
+
 class MyPairView(APIView):
     permission_classes = [permissions.IsAuthenticated]
 
@@ -89,9 +74,6 @@ class MyPairView(APIView):
             return Response({"detail": "Pairing not generated yet."}, status=404)
 
 
-# -------------------
-# 4️⃣ Wishlist CRUD
-# -------------------
 class WishlistCreateView(generics.CreateAPIView):
     serializer_class = WishlistSerializer
     permission_classes = [permissions.IsAuthenticated]
@@ -111,9 +93,7 @@ class WishlistListView(generics.ListAPIView):
         return WishlistItem.objects.filter(group__id=group_id)
 
 
-# -------------------
-# 5️⃣ Group Messages
-# -------------------
+
 class GroupMessageListCreateView(generics.ListCreateAPIView):
     serializer_class = GroupMessageSerializer
     permission_classes = [permissions.IsAuthenticated]
