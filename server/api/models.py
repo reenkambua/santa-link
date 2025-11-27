@@ -31,7 +31,7 @@ class Pair(models.Model):
     
         send_mail(
             subject=f"🎅 Your Secret Santa Recipient for {self.group.name}",
-            message=f"Hi {self.giver.username}, your recipient is {self.receiver.username}!",
+            message=f"Hi {self.giver.username}, your recipient is {self.receiver.username}!Have fun and enjoy the gifting. Cant wait to share the gifts.",
             from_email=os.getenv("EMAIL_HOST_USER"),
             recipient_list=[self.giver.email],
             fail_silently=True
